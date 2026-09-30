@@ -6,3 +6,4 @@ Couleur secondaire : vert
 Période par défaut : année en cours
 Public visé : direction commerciale
 RLS activée : non
+Option 3 : aucune
