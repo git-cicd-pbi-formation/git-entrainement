@@ -4,5 +4,4 @@ Titre de la page d'accueil : Tableau de bord commercial
 Couleur principale : bleu
 Période par défaut : année en cours
 Public visé : direction commerciale
-Vincent : "Ines ! tu es en periode d'essai" 
-Vincent boude pour 100 points 
+Version modifiée
