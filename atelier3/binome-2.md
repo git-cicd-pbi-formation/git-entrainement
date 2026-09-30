@@ -5,3 +5,4 @@ Couleur principale : rouge
 Couleur secondaire : vert
 Période par défaut : année en cours
 Public visé : direction commerciale
+RLS activée : non
