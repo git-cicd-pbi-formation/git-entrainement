@@ -5,3 +5,4 @@ Couleur principale : bleu
 Période par défaut : année en cours
 Public visé : direction commerciale
 Ines :"J AI FAIM !!!"
+Ines : "J AI SOIF!!!''
