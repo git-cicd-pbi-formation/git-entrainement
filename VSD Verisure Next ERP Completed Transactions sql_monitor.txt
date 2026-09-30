@@ -1,0 +1,449 @@
+<SQL_EXPLAIN_PLAN>
+<DATA_DS>
+<![CDATA[
+               Datamodel SQL Explain Plan Report 20260930   
+================================================================
+Driver Details:JDBC Driver:Oracle JDBC driver:weblogic.jdbc.wrapper.PoolConnection_oracle_jdbc_driver_T4CConnection:23.7.0.25.01
+DBName:Oracle 
+DBVersion:Oracle Database 19c EE Extreme Perf Release 19.0.0.0.0 - Production
+Version 19.28.0.0.0
+SQLQuery:EXPLAIN PLAN SET STATEMENT_ID = 'dm_plan_DecInv_251112_102530' FOR 
+WITH user_access AS
+(   SELECT furda.inv_organization_id
+	FROM fun_user_role_data_asgnmnts furda
+		,per_users pu
+	WHERE furda.role_name = 'ORA_INV_INVENTORY_MANAGER_JOB'
+		AND furda.inv_organization_id IS NOT NULL
+		AND pu.user_guid = furda.user_guid
+		AND pu.person_id = hrc_session_util.get_user_personid
+),
+org_item_details
+AS (
+	SELECT DISTINCT bu.BU_NAME as business_unit_name
+		,iod.organization_id
+		,iod.organization_code
+		,HOU.NAME  organization_name
+		,esib.item_number
+		,esib.inventory_item_id
+		,esit.description item_description
+	FROM 		 FUN_ALL_BUSINESS_UNITS_V bu
+		 ,HR_ALL_ORGANIZATION_UNITS_X HOU
+		,inv_org_parameters iod
+		,egp_system_items_b esib
+		,egp_system_items_tl esit
+	WHERE bu.BU_ID = iod.BUSINESS_UNIT_ID  
+	    AND bu.BU_NAME = :p_bu_name
+		AND HOU.ORGANIZATION_ID = iod.ORGANIZATION_ID
+		AND (iod.organization_code IN (:p_orgcode)OR LEAST(:p_orgcode) IS NULL)
+		AND esib.item_number = NVL(UPPER(:p_item), esib.item_number)
+		AND iod.organization_id = esib.organization_id
+		AND esib.organization_id = esit.organization_id
+		AND esib.inventory_item_id = esit.inventory_item_id
+		AND esit.LANGUAGE = USERENV('LANG')
+	)
+	,cost_details_plus
+AS (
+	SELECT oid.business_unit_name
+		,oid.organization_id
+		,oid.organization_code
+		,oid.organization_name
+		,oid.item_number
+		,oid.inventory_item_id
+		,oid.item_description
+		,ROUND(ccvc.PERP_AVERAGE_COST, 4) total_unit_cost
+	FROM cst_vu_onhand_valuations ccvc
+		,cst_cost_inv_orgs ccio
+		,CST_COST_BOOKS_B cbc
+		,cst_item_cost_profiles cicp
+		,cst_cost_profiles_b ccp
+		,cst_val_units_b vub
+		,org_item_details oid
+	WHERE ccvc.COST_ORG_ID = ccio.COST_ORG_ID
+		AND ccvc.COST_BOOK_ID = cbc.COST_BOOK_ID
+		AND ccvc.inventory_item_id = oid.INVENTORY_ITEM_ID
+		AND ccio.inv_org_id = oid.organization_id
+		AND SYSDATE BETWEEN ccvc.START_DATE
+			AND (ccvc.END_DATE - 1)
+		AND ccvc.COST_METHOD_CODE = 'PERPETUAL_AVERAGE'
+				AND cicp.cost_book_id = ccvc.cost_book_id
+				AND cicp.inventory_item_id = ccvc.inventory_item_id
+		AND ccp.cost_profile_id = cicp.asset_cost_profile_id
+		AND vub.cost_org_id = cicp.cost_org_id
+		AND vub.cost_book_id = cicp.cost_book_id
+		AND vub.val_structure_id = ccp.val_structure_id
+		AND vub.val_unit_id = ccvc.val_unit_id
+	)
+	,inv_trx_det
+AS (
+	SELECT itt.transaction_type_name transaction_type
+		,itstt.transaction_source_type_name
+		,isi.description subinventory_name
+		,TO_CHAR(imt.transaction_date, 'YYYY/MM/DD') transaction_date
+		,imt.transaction_id "TRANSACTION"
+		,imt.subinventory_code subinventory
+		,imt.transaction_quantity quantity
+		,imt.transaction_source_id
+		,imt.trx_source_line_id
+		,cd.business_unit_name
+		,cd.organization_id
+		,cd.organization_code
+		,cd.organization_name
+		,cd.item_number
+		,cd.inventory_item_id
+		,cd.item_description
+		,round(cd.total_unit_cost, 2) total_unit_cost
+		,imt.ATTRIBUTE4
+		,imt.ATTRIBUTE10
+		,imt.ATTRIBUTE11
+		,imt.ATTRIBUTE12
+		,imt.ATTRIBUTE13
+		,imt.ATTRIBUTE14
+		,imt.ATTRIBUTE15
+		,imt.ATTRIBUTE16
+	FROM inv_material_txns imt
+		,inv_transaction_types_tl itt
+		,inv_org_parameters iop
+		,egp_system_items_b esib
+		,inv_txn_source_types_tl itstt
+		,inv_secondary_inventories isi
+		,cost_details cd
+	WHERE itt.LANGUAGE = 'US'
+		AND imt.transaction_type_id = itt.transaction_type_id
+		AND imt.source_code = 'SBN'
+		AND imt.organization_id = iop.organization_id
+		AND imt.inventory_item_id = esib.inventory_item_id
+		AND imt.organization_id = esib.organization_id
+		AND imt.organization_id = cd.organization_id
+		AND imt.inventory_item_id = cd.inventory_item_id
+		AND imt.transaction_source_type_id = itstt.transaction_source_type_id
+		AND itstt.LANGUAGE = USERENV('LANG')
+				AND (itt.transaction_type_name IN (:p_transsourcetypename1_0,:p_transsourcetypename1_1,:p_transsourcetypename1_2,:p_transsourcetypename1_3) OR LEAST(:p_transsourcetypename2_0,:p_transsourcetypename2_1,:p_transsourcetypename2_2,:p_transsourcetypename2_3) IS NULL)
+		AND TO_CHAR(imt.transaction_date,'YYYY/MM/DD') BETWEEN :p_startdate AND :p_enddate
+				AND imt.subinventory_code = NVL(:p_subinv, imt.subinventory_code)
+		AND isi.organization_id = imt.organization_id
+		AND isi.secondary_inventory_name = imt.subinventory_code
+	)
+
+SELECT   BUSINESS_UNIT_NAME BU
+	,TRANSACTION_DATE TRX_DATE
+	,NULL TRX_DATETIME
+	,TRANSACTION TRANS
+	,WO_NUMBER WO
+	,TRANSACTION_TYPE TRX_TYPE
+	,TRANSACTION_SOURCE_TYPE TRX_SRC_TYPE
+	,INTALLATION_ID INS_ID
+	,PRICELIST_GROUP PRICE
+	,BUSINESS_LINE BLINE
+	,COST_CENTER CC
+	,SBN_BUSINESS_LINE SBN_BL
+	,SBN_COST_CENTER SBN_CC
+	,IO_CODE
+	,IO_NAME
+	,SUBINVENTORY SUBINV
+	,SUBINVENTORY_NAME SUBIN_NAME
+	,ITEM
+	,ITEM_DESCRIPTION ITEM_DESC
+	,QUANTITY QTY
+	,WO_TYPE
+	,TOTAL_UNIT_COST T_UNIT_COST
+	,QUANTITY * TOTAL_UNIT_COST T_COST  
+
+FROM (
+	SELECT itd.BUSINESS_UNIT_NAME BUSINESS_UNIT_NAME
+		,itd.transaction_date
+		,NULL TRANSACTION_DATETIME
+		,itd.TRANSACTION
+		,itd.ATTRIBUTE4 WO_NUMBER
+		,itd.TRANSACTION_TYPE
+		,itd.TRANSACTION_SOURCE_TYPE_NAME TRANSACTION_SOURCE_TYPE
+		,itd.ATTRIBUTE10 PRICELIST_GROUP
+		,itd.ATTRIBUTE16 INTALLATION_ID
+		,itd.ATTRIBUTE15 WO_TYPE
+		,itd.ATTRIBUTE11 BUSINESS_LINE
+		,itd.ATTRIBUTE12 COST_CENTER
+		,itd.ATTRIBUTE13 SBN_BUSINESS_LINE
+		,itd.ATTRIBUTE14 SBN_COST_CENTER
+		,itd.ORGANIZATION_CODE IO_CODE
+		,itd.ORGANIZATION_NAME IO_NAME
+		,itd.SUBINVENTORY
+		,itd.SUBINVENTORY_NAME
+		,itd.ITEM_NUMBER ITEM
+		,itd.ITEM_DESCRIPTION
+		,itd.QUANTITY
+		,itd.total_unit_cost
+	FROM inv_trx_det itd
+			WHERE 1 = 1
+		AND itd.ATTRIBUTE4 = NVL(:P_WO_Number,itd.ATTRIBUTE4)
+			)
+SQL Query Timeout: 500
+Number of SQL Executions: 1
+PLAN_TABLE_OUTPUT
+-----------------------------------------------------------------------------------------------------
+Plan hash value: 4285059293
+ 
+-----------------------------------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                                                    | Name                           | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                                             |                                |     1 |  4998 |   959   (1)| 00:00:01 |
+|   1 |  VIEW                                                        | VM_NWVW_1                      |     1 |  4998 |   959   (1)| 00:00:01 |
+|   2 |   HASH UNIQUE                                                |                                |     1 |   946 |   959   (1)| 00:00:01 |
+|   3 |    CONCATENATION                                             |                                |       |       |            |          |
+|*  4 |     FILTER                                                   |                                |       |       |            |          |
+|   5 |      NESTED LOOPS                                            |                                |     1 |   946 |   891   (1)| 00:00:01 |
+|   6 |       NESTED LOOPS                                           |                                |     1 |   914 |   890   (1)| 00:00:01 |
+|   7 |        NESTED LOOPS                                          |                                |     1 |   862 |   888   (1)| 00:00:01 |
+|   8 |         NESTED LOOPS                                         |                                |     1 |   840 |   888   (1)| 00:00:01 |
+|*  9 |          HASH JOIN                                           |                                |     1 |   788 |   887   (1)| 00:00:01 |
+|  10 |           NESTED LOOPS                                       |                                |     1 |   694 |    54   (0)| 00:00:01 |
+|  11 |            NESTED LOOPS                                      |                                |     1 |   640 |    53   (0)| 00:00:01 |
+|  12 |             NESTED LOOPS                                     |                                |     1 |   618 |    53   (0)| 00:00:01 |
+|  13 |              NESTED LOOPS                                    |                                |     1 |   586 |    52   (0)| 00:00:01 |
+|  14 |               NESTED LOOPS                                   |                                |     1 |   546 |    51   (0)| 00:00:01 |
+|  15 |                NESTED LOOPS                                  |                                |     1 |   494 |    50   (0)| 00:00:01 |
+|  16 |                 NESTED LOOPS                                 |                                |     1 |   399 |    46   (0)| 00:00:01 |
+|  17 |                  NESTED LOOPS                                |                                |     1 |   348 |    44   (0)| 00:00:01 |
+|  18 |                   NESTED LOOPS                               |                                |     1 |   320 |    34   (0)| 00:00:01 |
+|  19 |                    NESTED LOOPS                              |                                |     1 |   288 |    33   (0)| 00:00:01 |
+|  20 |                     NESTED LOOPS                             |                                |     1 |   231 |    32   (0)| 00:00:01 |
+|* 21 |                      HASH JOIN                               |                                |     1 |   202 |    30   (0)| 00:00:01 |
+|  22 |                       NESTED LOOPS                           |                                |     1 |   174 |     8   (0)| 00:00:01 |
+|  23 |                        NESTED LOOPS                          |                                |     1 |   174 |     8   (0)| 00:00:01 |
+|  24 |                         NESTED LOOPS                         |                                |     1 |   139 |     6   (0)| 00:00:01 |
+|  25 |                          NESTED LOOPS                        |                                |     1 |    86 |     4   (0)| 00:00:01 |
+|* 26 |                           TABLE ACCESS BY INDEX ROWID BATCHED| hr_organization_units_f_tl     |     1 |    57 |     3   (0)| 00:00:01 |
+|* 27 |                            INDEX RANGE SCAN                  | HR_ALL_ORG_UNITS_F_TL_N1       |     1 |       |     1   (0)| 00:00:01 |
+|* 28 |                           TABLE ACCESS BY INDEX ROWID        | hr_all_organization_units_f    |     1 |    29 |     1   (0)| 00:00:01 |
+|* 29 |                            INDEX UNIQUE SCAN                 | HR_ALL_ORGANIZATION_UNITS_PK   |     1 |       |     0   (0)| 00:00:01 |
+|* 30 |                          TABLE ACCESS BY INDEX ROWID BATCHED | hr_organization_information_f  |     1 |    53 |     2   (0)| 00:00:01 |
+|* 31 |                           INDEX RANGE SCAN                   | HR_ORGANIZATION_INFORMATION_N2 |     1 |       |     1   (0)| 00:00:01 |
+|* 32 |                         INDEX RANGE SCAN                     | HR_ORG_UNIT_CLASS_U2           |     1 |       |     1   (0)| 00:00:01 |
+|* 33 |                        TABLE ACCESS BY INDEX ROWID           | hr_org_unit_classifications_f  |     1 |    35 |     2   (0)| 00:00:01 |
+|* 34 |                       TABLE ACCESS STORAGE FULL              | inv_org_parameters             |    59 |  1652 |    22   (0)| 00:00:01 |
+|* 35 |                      TABLE ACCESS BY INDEX ROWID BATCHED     | hr_all_organization_units_f    |     1 |    29 |     2   (0)| 00:00:01 |
+|* 36 |                       INDEX RANGE SCAN                       | HR_ALL_ORGANIZATION_UNITS_PK   |     1 |       |     1   (0)| 00:00:01 |
+|* 37 |                     TABLE ACCESS BY INDEX ROWID              | hr_organization_units_f_tl     |     1 |    57 |     1   (0)| 00:00:01 |
+|* 38 |                      INDEX UNIQUE SCAN                       | HR_ORGANIZATION_UNITS_F_TL_PK  |     1 |       |     0   (0)| 00:00:01 |
+|  39 |                    TABLE ACCESS BY INDEX ROWID               | cst_cost_inv_orgs              |     1 |    32 |     1   (0)| 00:00:01 |
+|* 40 |                     INDEX UNIQUE SCAN                        | CST_COST_INV_ORGS_U2           |     1 |       |     0   (0)| 00:00:01 |
+|  41 |                   TABLE ACCESS BY INDEX ROWID BATCHED        | egp_system_items_b             |     1 |    28 |    10   (0)| 00:00:01 |
+|* 42 |                    INDEX RANGE SCAN                          | EGP_SYSTEM_ITEMS_B_U3          |     1 |       |     9   (0)| 00:00:01 |
+|  43 |                  TABLE ACCESS BY INDEX ROWID                 | egp_system_items_tl            |     1 |    51 |     2   (0)| 00:00:01 |
+|* 44 |                   INDEX UNIQUE SCAN                          | EGP_SYSTEM_ITEMS_TL_U1         |     1 |       |     1   (0)| 00:00:01 |
+|* 45 |                 TABLE ACCESS BY INDEX ROWID BATCHED          | inv_material_txns              |     1 |    95 |     4   (0)| 00:00:01 |
+|* 46 |                  INDEX RANGE SCAN                            | INV_MATERIAL_TXNS_N1           |     1 |       |     3   (0)| 00:00:01 |
+|  47 |                TABLE ACCESS BY INDEX ROWID                   | inv_secondary_inventories      |     1 |    52 |     1   (0)| 00:00:01 |
+|* 48 |                 INDEX UNIQUE SCAN                            | INV_SECONDARY_INVS_U1          |     1 |       |     0   (0)| 00:00:01 |
+|  49 |               TABLE ACCESS BY INDEX ROWID                    | inv_txn_source_types_tl        |     1 |    40 |     1   (0)| 00:00:01 |
+|* 50 |                INDEX UNIQUE SCAN                             | INV_TXN_SOURCE_TYPES_TL_U11    |     1 |       |     0   (0)| 00:00:01 |
+|* 51 |              INDEX UNIQUE SCAN                               | EGP_SYSTEM_ITEMS_B_U1          |     1 |    32 |     1   (0)| 00:00:01 |
+|* 52 |             INDEX UNIQUE SCAN                                | INV_ORG_PARAMETERS_U1          |     1 |    22 |     0   (0)| 00:00:01 |
+|* 53 |            TABLE ACCESS BY INDEX ROWID                       | inv_transaction_types_tl       |     1 |    54 |     1   (0)| 00:00:01 |
+|* 54 |             INDEX UNIQUE SCAN                                | INV_TRANSACTION_TYPES_TL_U11   |     1 |       |     0   (0)| 00:00:01 |
+|* 55 |           TABLE ACCESS BY INDEX ROWID BATCHED                | cst_vu_onhand_valuations       | 39173 |  3595K|   833   (1)| 00:00:01 |
+|* 56 |            INDEX SKIP SCAN                                   | CST_VU_ONHAND_VALUATIONS_N4    |  7291 |       |   497   (0)| 00:00:01 |
+|  57 |          TABLE ACCESS BY INDEX ROWID                         | cst_val_units_b                |     1 |    52 |     1   (0)| 00:00:01 |
+|* 58 |           INDEX UNIQUE SCAN                                  | CST_VAL_UNITS_B_PK             |     1 |       |     0   (0)| 00:00:01 |
+|* 59 |         INDEX UNIQUE SCAN                                    | CST_COST_BOOKS_B_PK            |     1 |    22 |     0   (0)| 00:00:01 |
+|* 60 |        TABLE ACCESS BY INDEX ROWID BATCHED                   | cst_item_cost_profiles         |     1 |    52 |     2   (0)| 00:00:01 |
+|* 61 |         INDEX RANGE SCAN                                     | CST_ITEM_COST_PROFILES_U1      |     1 |       |     1   (0)| 00:00:01 |
+|* 62 |       TABLE ACCESS BY INDEX ROWID                            | cst_cost_profiles_b            |     1 |    32 |     1   (0)| 00:00:01 |
+|* 63 |        INDEX UNIQUE SCAN                                     | CST_COST_PROFILES_B_PK         |     1 |       |     0   (0)| 00:00:01 |
+|* 64 |     FILTER                                                   |                                |       |       |            |          |
+|  65 |      NESTED LOOPS                                            |                                |     1 |   946 |    67   (0)| 00:00:01 |
+|  66 |       NESTED LOOPS                                           |                                |     1 |   914 |    66   (0)| 00:00:01 |
+|  67 |        NESTED LOOPS                                          |                                |     1 |   862 |    64   (0)| 00:00:01 |
+|  68 |         NESTED LOOPS                                         |                                |     1 |   840 |    64   (0)| 00:00:01 |
+|  69 |          MERGE JOIN CARTESIAN                                |                                |     1 |   746 |    61   (0)| 00:00:01 |
+|  70 |           NESTED LOOPS                                       |                                |     1 |   694 |    54   (0)| 00:00:01 |
+|  71 |            NESTED LOOPS                                      |                                |     1 |   640 |    53   (0)| 00:00:01 |
+|  72 |             NESTED LOOPS                                     |                                |     1 |   618 |    53   (0)| 00:00:01 |
+|  73 |              NESTED LOOPS                                    |                                |     1 |   586 |    52   (0)| 00:00:01 |
+|  74 |               NESTED LOOPS                                   |                                |     1 |   546 |    51   (0)| 00:00:01 |
+|  75 |                NESTED LOOPS                                  |                                |     1 |   494 |    50   (0)| 00:00:01 |
+|  76 |                 NESTED LOOPS                                 |                                |     1 |   399 |    46   (0)| 00:00:01 |
+|  77 |                  NESTED LOOPS                                |                                |     1 |   348 |    44   (0)| 00:00:01 |
+|  78 |                   NESTED LOOPS                               |                                |     1 |   320 |    34   (0)| 00:00:01 |
+|  79 |                    NESTED LOOPS                              |                                |     1 |   288 |    33   (0)| 00:00:01 |
+|  80 |                     NESTED LOOPS                             |                                |     1 |   231 |    32   (0)| 00:00:01 |
+|* 81 |                      HASH JOIN                               |                                |     1 |   202 |    30   (0)| 00:00:01 |
+|  82 |                       NESTED LOOPS                           |                                |     1 |   174 |     8   (0)| 00:00:01 |
+|  83 |                        NESTED LOOPS                          |                                |     1 |   174 |     8   (0)| 00:00:01 |
+|  84 |                         NESTED LOOPS                         |                                |     1 |   139 |     6   (0)| 00:00:01 |
+|  85 |                          NESTED LOOPS                        |                                |     1 |    86 |     4   (0)| 00:00:01 |
+|* 86 |                           TABLE ACCESS BY INDEX ROWID BATCHED| hr_organization_units_f_tl     |     1 |    57 |     3   (0)| 00:00:01 |
+|* 87 |                            INDEX RANGE SCAN                  | HR_ALL_ORG_UNITS_F_TL_N1       |     1 |       |     1   (0)| 00:00:01 |
+|* 88 |                           TABLE ACCESS BY INDEX ROWID        | hr_all_organization_units_f    |     1 |    29 |     1   (0)| 00:00:01 |
+|* 89 |                            INDEX UNIQUE SCAN                 | HR_ALL_ORGANIZATION_UNITS_PK   |     1 |       |     0   (0)| 00:00:01 |
+|* 90 |                          TABLE ACCESS BY INDEX ROWID BATCHED | hr_organization_information_f  |     1 |    53 |     2   (0)| 00:00:01 |
+|* 91 |                           INDEX RANGE SCAN                   | HR_ORGANIZATION_INFORMATION_N2 |     1 |       |     1   (0)| 00:00:01 |
+|* 92 |                         INDEX RANGE SCAN                     | HR_ORG_UNIT_CLASS_U2           |     1 |       |     1   (0)| 00:00:01 |
+|* 93 |                        TABLE ACCESS BY INDEX ROWID           | hr_org_unit_classifications_f  |     1 |    35 |     2   (0)| 00:00:01 |
+|* 94 |                       TABLE ACCESS STORAGE FULL              | inv_org_parameters             |    59 |  1652 |    22   (0)| 00:00:01 |
+|* 95 |                      TABLE ACCESS BY INDEX ROWID BATCHED     | hr_all_organization_units_f    |     1 |    29 |     2   (0)| 00:00:01 |
+|* 96 |                       INDEX RANGE SCAN                       | HR_ALL_ORGANIZATION_UNITS_PK   |     1 |       |     1   (0)| 00:00:01 |
+|* 97 |                     TABLE ACCESS BY INDEX ROWID              | hr_organization_units_f_tl     |     1 |    57 |     1   (0)| 00:00:01 |
+|* 98 |                      INDEX UNIQUE SCAN                       | HR_ORGANIZATION_UNITS_F_TL_PK  |     1 |       |     0   (0)| 00:00:01 |
+|  99 |                    TABLE ACCESS BY INDEX ROWID               | cst_cost_inv_orgs              |     1 |    32 |     1   (0)| 00:00:01 |
+|*100 |                     INDEX UNIQUE SCAN                        | CST_COST_INV_ORGS_U2           |     1 |       |     0   (0)| 00:00:01 |
+| 101 |                   TABLE ACCESS BY INDEX ROWID BATCHED        | egp_system_items_b             |     1 |    28 |    10   (0)| 00:00:01 |
+|*102 |                    INDEX RANGE SCAN                          | EGP_SYSTEM_ITEMS_B_U3          |     1 |       |     9   (0)| 00:00:01 |
+| 103 |                  TABLE ACCESS BY INDEX ROWID                 | egp_system_items_tl            |     1 |    51 |     2   (0)| 00:00:01 |
+|*104 |                   INDEX UNIQUE SCAN                          | EGP_SYSTEM_ITEMS_TL_U1         |     1 |       |     1   (0)| 00:00:01 |
+|*105 |                 TABLE ACCESS BY INDEX ROWID BATCHED          | inv_material_txns              |     1 |    95 |     4   (0)| 00:00:01 |
+|*106 |                  INDEX RANGE SCAN                            | INV_MATERIAL_TXNS_N43          |     1 |       |     3   (0)| 00:00:01 |
+| 107 |                TABLE ACCESS BY INDEX ROWID                   | inv_secondary_inventories      |     1 |    52 |     1   (0)| 00:00:01 |
+|*108 |                 INDEX UNIQUE SCAN                            | INV_SECONDARY_INVS_U1          |     1 |       |     0   (0)| 00:00:01 |
+| 109 |               TABLE ACCESS BY INDEX ROWID                    | inv_txn_source_types_tl        |     1 |    40 |     1   (0)| 00:00:01 |
+|*110 |                INDEX UNIQUE SCAN                             | INV_TXN_SOURCE_TYPES_TL_U11    |     1 |       |     0   (0)| 00:00:01 |
+|*111 |              INDEX UNIQUE SCAN                               | EGP_SYSTEM_ITEMS_B_U1          |     1 |    32 |     1   (0)| 00:00:01 |
+|*112 |             INDEX UNIQUE SCAN                                | INV_ORG_PARAMETERS_U1          |     1 |    22 |     0   (0)| 00:00:01 |
+|*113 |            TABLE ACCESS BY INDEX ROWID                       | inv_transaction_types_tl       |     1 |    54 |     1   (0)| 00:00:01 |
+|*114 |             INDEX UNIQUE SCAN                                | INV_TRANSACTION_TYPES_TL_U11   |     1 |       |     0   (0)| 00:00:01 |
+| 115 |           BUFFER SORT                                        |                                |   214 | 11128 |    60   (0)| 00:00:01 |
+| 116 |            TABLE ACCESS STORAGE FULL                         | cst_val_units_b                |   214 | 11128 |     7   (0)| 00:00:01 |
+|*117 |          TABLE ACCESS BY INDEX ROWID BATCHED                 | cst_vu_onhand_valuations       |     1 |    94 |     3   (0)| 00:00:01 |
+|*118 |           INDEX RANGE SCAN                                   | CST_VU_ONHAND_VALUATIONS_N3    |     1 |       |     2   (0)| 00:00:01 |
+|*119 |         INDEX UNIQUE SCAN                                    | CST_COST_BOOKS_B_PK            |     1 |    22 |     0   (0)| 00:00:01 |
+|*120 |        TABLE ACCESS BY INDEX ROWID BATCHED                   | cst_item_cost_profiles         |     1 |    52 |     2   (0)| 00:00:01 |
+|*121 |         INDEX RANGE SCAN                                     | CST_ITEM_COST_PROFILES_U1      |     1 |       |     1   (0)| 00:00:01 |
+|*122 |       TABLE ACCESS BY INDEX ROWID                            | cst_cost_profiles_b            |     1 |    32 |     1   (0)| 00:00:01 |
+|*123 |        INDEX UNIQUE SCAN                                     | CST_COST_PROFILES_B_PK         |     1 |       |     0   (0)| 00:00:01 |
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ 
+Predicate Information (identified by operation id):
+---------------------------------------------------
+ 
+   4 - filter(:P_ENDDATE>=:P_STARTDATE AND :P_SUBINV IS NULL)
+   9 - access("CCVC"."COST_ORG_ID"="CCIO"."COST_ORG_ID" AND "CCVC"."INVENTORY_ITEM_ID"="ESIB"."INVENTORY_ITEM_ID")
+  21 - access("ORGANIZATION_ID"="IOD"."BUSINESS_UNIT_ID")
+  26 - filter("EFFECTIVE_END_DATE">=TRUNC(SYSDATE@!) AND (("BUSINESS_GROUP_ID"=0 OR "BUSINESS_GROUP_ID"=1) OR 
+              "BUSINESS_GROUP_ID"=DECODE(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID'),NULL,"BUSINESS_GROUP_ID",TO_NUMBER(SYS_CONTEXT('FND_VPD_CTX',
+              'FND_ENTERPRISE_ID')))) AND "EFFECTIVE_START_DATE"<=TRUNC(SYSDATE@!))
+  27 - access("LANGUAGE"=USERENV('LANG') AND "NAME"=:P_BU_NAME)
+  28 - filter("BUSINESS_GROUP_ID"=0 OR "BUSINESS_GROUP_ID"=1 OR "BUSINESS_GROUP_ID"=DECODE(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID
+              '),NULL,"BUSINESS_GROUP_ID",TO_NUMBER(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID'))))
+  29 - access("ORGANIZATION_ID"="ORGANIZATION_ID" AND "EFFECTIVE_START_DATE"="EFFECTIVE_START_DATE" AND 
+              "EFFECTIVE_END_DATE"="EFFECTIVE_END_DATE")
+       filter("EFFECTIVE_END_DATE">=TRUNC(SYSDATE@!) AND "EFFECTIVE_START_DATE"<=TRUNC(SYSDATE@!))
+  30 - filter("EFFECTIVE_END_DATE">=TRUNC(SYSDATE@!) AND "EFFECTIVE_START_DATE"<=TRUNC(SYSDATE@!) AND (("BUSINESS_GROUP_ID"=0 OR 
+              "BUSINESS_GROUP_ID"=1) OR "BUSINESS_GROUP_ID"=DECODE(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID'),NULL,"BUSINESS_GROUP_ID",TO_NUMBER(
+              SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID')))))
+  31 - access("ORGANIZATION_ID"="ORGANIZATION_ID" AND "ORG_INFORMATION_CONTEXT"='FUN_BUSINESS_UNIT')
+  32 - access("ORGANIZATION_ID"="ORGANIZATION_ID" AND "CLASSIFICATION_CODE"='FUN_BUSINESS_UNIT' AND 
+              "EFFECTIVE_END_DATE">=TRUNC(SYSDATE@!) AND "EFFECTIVE_START_DATE"<=TRUNC(SYSDATE@!))
+       filter("EFFECTIVE_END_DATE">=TRUNC(SYSDATE@!))
+  33 - filter("BUSINESS_GROUP_ID"=0 OR "BUSINESS_GROUP_ID"=1 OR "BUSINESS_GROUP_ID"=DECODE(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID
+              '),NULL,"BUSINESS_GROUP_ID",TO_NUMBER(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID'))))
+  34 - storage(LEAST(:P_ORGCODE) IS NULL OR "IOD"."ORGANIZATION_CODE"=:P_ORGCODE)
+       filter(LEAST(:P_ORGCODE) IS NULL OR "IOD"."ORGANIZATION_CODE"=:P_ORGCODE)
+  35 - filter("BUSINESS_GROUP_ID"=0 OR "BUSINESS_GROUP_ID"=1 OR "BUSINESS_GROUP_ID"=DECODE(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID
+              '),NULL,"BUSINESS_GROUP_ID",TO_NUMBER(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID'))))
+  36 - access("ORGANIZATION_ID"="IOD"."ORGANIZATION_ID" AND "EFFECTIVE_END_DATE">=TRUNC(SYSDATE@!) AND 
+              "EFFECTIVE_START_DATE"<=TRUNC(SYSDATE@!))
+       filter("EFFECTIVE_END_DATE">=TRUNC(SYSDATE@!))
+  37 - filter("BUSINESS_GROUP_ID"=0 OR "BUSINESS_GROUP_ID"=1 OR "BUSINESS_GROUP_ID"=DECODE(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID
+              '),NULL,"BUSINESS_GROUP_ID",TO_NUMBER(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID'))))
+  38 - access("ORGANIZATION_ID"="ORGANIZATION_ID" AND "LANGUAGE"=USERENV('LANG') AND "EFFECTIVE_START_DATE"="EFFECTIVE_START_DATE" AND 
+              "EFFECTIVE_END_DATE"="EFFECTIVE_END_DATE")
+       filter("EFFECTIVE_END_DATE">=TRUNC(SYSDATE@!) AND "EFFECTIVE_START_DATE"<=TRUNC(SYSDATE@!))
+  40 - access("CCIO"."INV_ORG_ID"="IOD"."ORGANIZATION_ID")
+  42 - access("IOD"."ORGANIZATION_ID"="ESIB"."ORGANIZATION_ID")
+       filter("ESIB"."ITEM_NUMBER"=NVL(UPPER(:P_ITEM),"ESIB"."ITEM_NUMBER"))
+  44 - access("ESIB"."INVENTORY_ITEM_ID"="ESIT"."INVENTORY_ITEM_ID" AND "ESIB"."ORGANIZATION_ID"="ESIT"."ORGANIZATION_ID" AND 
+              "ESIT"."LANGUAGE"=USERENV('LANG'))
+  45 - filter("IMT"."SOURCE_CODE"='SBN' AND "IMT"."ATTRIBUTE4"=NVL(:P_WO_NUMBER,"IMT"."ATTRIBUTE4") AND "IMT"."SUBINVENTORY_CODE" IS 
+              NOT NULL)
+  46 - access("IMT"."INVENTORY_ITEM_ID"="ESIB"."INVENTORY_ITEM_ID" AND "IMT"."ORGANIZATION_ID"="IOD"."ORGANIZATION_ID")
+       filter(TO_TIMESTAMP(TO_CHAR(INTERNAL_FUNCTION("IMT"."TRANSACTION_DATE"),'YYYY/MM/DD'))>=:P_STARTDATE AND 
+              TO_TIMESTAMP(TO_CHAR(INTERNAL_FUNCTION("IMT"."TRANSACTION_DATE"),'YYYY/MM/DD'))<=:P_ENDDATE)
+  48 - access("ISI"."SECONDARY_INVENTORY_NAME"="IMT"."SUBINVENTORY_CODE" AND "ISI"."ORGANIZATION_ID"="IMT"."ORGANIZATION_ID")
+  50 - access("IMT"."TRANSACTION_SOURCE_TYPE_ID"="TRANSACTION_SOURCE_TYPE_ID" AND "LANGUAGE"=USERENV('LANG') AND "ORA_SEED_SET2"='Y')
+  51 - access("IMT"."INVENTORY_ITEM_ID"="ESIB"."INVENTORY_ITEM_ID" AND "IMT"."ORGANIZATION_ID"="ESIB"."ORGANIZATION_ID")
+  52 - access("IMT"."ORGANIZATION_ID"="IOP"."ORGANIZATION_ID")
+  53 - filter(LEAST(:P_TRANSSOURCETYPENAME2_0,:P_TRANSSOURCETYPENAME2_1,:P_TRANSSOURCETYPENAME2_2,:P_TRANSSOURCETYPENAME2_3) IS NULL 
+              OR "TRANSACTION_TYPE_NAME"=:P_TRANSSOURCETYPENAME1_0 OR "TRANSACTION_TYPE_NAME"=:P_TRANSSOURCETYPENAME1_1 OR 
+              "TRANSACTION_TYPE_NAME"=:P_TRANSSOURCETYPENAME1_2 OR "TRANSACTION_TYPE_NAME"=:P_TRANSSOURCETYPENAME1_3)
+  54 - access("IMT"."TRANSACTION_TYPE_ID"="TRANSACTION_TYPE_ID" AND "LANGUAGE"='US' AND "ORA_SEED_SET2"='Y')
+  55 - filter("CCVC"."COST_METHOD_CODE"='PERPETUAL_AVERAGE')
+  56 - access("CCVC"."START_DATE"<=SYSDATE@!)
+       filter(INTERNAL_FUNCTION("CCVC"."END_DATE")-1>=SYSDATE@! AND "CCVC"."START_DATE"<=SYSDATE@!)
+  58 - access("VUB"."VAL_UNIT_ID"="CCVC"."VAL_UNIT_ID")
+  59 - access("CCVC"."COST_BOOK_ID"="CBC"."COST_BOOK_ID")
+  60 - filter("CICP"."ASSET_COST_PROFILE_ID" IS NOT NULL)
+  61 - access("VUB"."COST_ORG_ID"="CICP"."COST_ORG_ID" AND "VUB"."COST_BOOK_ID"="CICP"."COST_BOOK_ID" AND 
+              "CICP"."INVENTORY_ITEM_ID"="CCVC"."INVENTORY_ITEM_ID")
+       filter("CICP"."COST_BOOK_ID"="CCVC"."COST_BOOK_ID")
+  62 - filter("VUB"."VAL_STRUCTURE_ID"="CCP"."VAL_STRUCTURE_ID")
+  63 - access("CCP"."COST_PROFILE_ID"="CICP"."ASSET_COST_PROFILE_ID")
+  64 - filter(:P_ENDDATE>=:P_STARTDATE AND :P_SUBINV IS NOT NULL)
+  81 - access("ORGANIZATION_ID"="IOD"."BUSINESS_UNIT_ID")
+  86 - filter("EFFECTIVE_END_DATE">=TRUNC(SYSDATE@!) AND (("BUSINESS_GROUP_ID"=0 OR "BUSINESS_GROUP_ID"=1) OR 
+              "BUSINESS_GROUP_ID"=DECODE(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID'),NULL,"BUSINESS_GROUP_ID",TO_NUMBER(SYS_CONTEXT('FND_VPD_CTX',
+              'FND_ENTERPRISE_ID')))) AND "EFFECTIVE_START_DATE"<=TRUNC(SYSDATE@!))
+  87 - access("LANGUAGE"=USERENV('LANG') AND "NAME"=:P_BU_NAME)
+  88 - filter("BUSINESS_GROUP_ID"=0 OR "BUSINESS_GROUP_ID"=1 OR "BUSINESS_GROUP_ID"=DECODE(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID
+              '),NULL,"BUSINESS_GROUP_ID",TO_NUMBER(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID'))))
+  89 - access("ORGANIZATION_ID"="ORGANIZATION_ID" AND "EFFECTIVE_START_DATE"="EFFECTIVE_START_DATE" AND 
+              "EFFECTIVE_END_DATE"="EFFECTIVE_END_DATE")
+       filter("EFFECTIVE_END_DATE">=TRUNC(SYSDATE@!) AND "EFFECTIVE_START_DATE"<=TRUNC(SYSDATE@!))
+  90 - filter("EFFECTIVE_END_DATE">=TRUNC(SYSDATE@!) AND "EFFECTIVE_START_DATE"<=TRUNC(SYSDATE@!) AND (("BUSINESS_GROUP_ID"=0 OR 
+              "BUSINESS_GROUP_ID"=1) OR "BUSINESS_GROUP_ID"=DECODE(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID'),NULL,"BUSINESS_GROUP_ID",TO_NUMBER(
+              SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID')))))
+  91 - access("ORGANIZATION_ID"="ORGANIZATION_ID" AND "ORG_INFORMATION_CONTEXT"='FUN_BUSINESS_UNIT')
+  92 - access("ORGANIZATION_ID"="ORGANIZATION_ID" AND "CLASSIFICATION_CODE"='FUN_BUSINESS_UNIT' AND 
+              "EFFECTIVE_END_DATE">=TRUNC(SYSDATE@!) AND "EFFECTIVE_START_DATE"<=TRUNC(SYSDATE@!))
+       filter("EFFECTIVE_END_DATE">=TRUNC(SYSDATE@!))
+  93 - filter("BUSINESS_GROUP_ID"=0 OR "BUSINESS_GROUP_ID"=1 OR "BUSINESS_GROUP_ID"=DECODE(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID
+              '),NULL,"BUSINESS_GROUP_ID",TO_NUMBER(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID'))))
+  94 - storage(LEAST(:P_ORGCODE) IS NULL OR "IOD"."ORGANIZATION_CODE"=:P_ORGCODE)
+       filter(LEAST(:P_ORGCODE) IS NULL OR "IOD"."ORGANIZATION_CODE"=:P_ORGCODE)
+  95 - filter("BUSINESS_GROUP_ID"=0 OR "BUSINESS_GROUP_ID"=1 OR "BUSINESS_GROUP_ID"=DECODE(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID
+              '),NULL,"BUSINESS_GROUP_ID",TO_NUMBER(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID'))))
+  96 - access("ORGANIZATION_ID"="IOD"."ORGANIZATION_ID" AND "EFFECTIVE_END_DATE">=TRUNC(SYSDATE@!) AND 
+              "EFFECTIVE_START_DATE"<=TRUNC(SYSDATE@!))
+       filter("EFFECTIVE_END_DATE">=TRUNC(SYSDATE@!))
+  97 - filter("BUSINESS_GROUP_ID"=0 OR "BUSINESS_GROUP_ID"=1 OR "BUSINESS_GROUP_ID"=DECODE(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID
+              '),NULL,"BUSINESS_GROUP_ID",TO_NUMBER(SYS_CONTEXT('FND_VPD_CTX','FND_ENTERPRISE_ID'))))
+  98 - access("ORGANIZATION_ID"="ORGANIZATION_ID" AND "LANGUAGE"=USERENV('LANG') AND "EFFECTIVE_START_DATE"="EFFECTIVE_START_DATE" AND 
+              "EFFECTIVE_END_DATE"="EFFECTIVE_END_DATE")
+       filter("EFFECTIVE_END_DATE">=TRUNC(SYSDATE@!) AND "EFFECTIVE_START_DATE"<=TRUNC(SYSDATE@!))
+ 100 - access("CCIO"."INV_ORG_ID"="IOD"."ORGANIZATION_ID")
+ 102 - access("IOD"."ORGANIZATION_ID"="ESIB"."ORGANIZATION_ID")
+       filter("ESIB"."ITEM_NUMBER"=NVL(UPPER(:P_ITEM),"ESIB"."ITEM_NUMBER"))
+ 104 - access("ESIB"."INVENTORY_ITEM_ID"="ESIT"."INVENTORY_ITEM_ID" AND "ESIB"."ORGANIZATION_ID"="ESIT"."ORGANIZATION_ID" AND 
+              "ESIT"."LANGUAGE"=USERENV('LANG'))
+ 105 - filter("IMT"."INVENTORY_ITEM_ID"="ESIB"."INVENTORY_ITEM_ID" AND "IMT"."SOURCE_CODE"='SBN' AND 
+              "IMT"."ATTRIBUTE4"=NVL(:P_WO_NUMBER,"IMT"."ATTRIBUTE4"))
+ 106 - access("IMT"."ORGANIZATION_ID"="IOD"."ORGANIZATION_ID" AND "IMT"."SUBINVENTORY_CODE"=:P_SUBINV)
+       filter(TO_TIMESTAMP(TO_CHAR(INTERNAL_FUNCTION("IMT"."TRANSACTION_DATE"),'YYYY/MM/DD'))>=:P_STARTDATE AND 
+              TO_TIMESTAMP(TO_CHAR(INTERNAL_FUNCTION("IMT"."TRANSACTION_DATE"),'YYYY/MM/DD'))<=:P_ENDDATE)
+ 108 - access("ISI"."SECONDARY_INVENTORY_NAME"="IMT"."SUBINVENTORY_CODE" AND "ISI"."ORGANIZATION_ID"="IMT"."ORGANIZATION_ID")
+ 110 - access("IMT"."TRANSACTION_SOURCE_TYPE_ID"="TRANSACTION_SOURCE_TYPE_ID" AND "LANGUAGE"=USERENV('LANG') AND "ORA_SEED_SET2"='Y')
+ 111 - access("IMT"."INVENTORY_ITEM_ID"="ESIB"."INVENTORY_ITEM_ID" AND "IMT"."ORGANIZATION_ID"="ESIB"."ORGANIZATION_ID")
+ 112 - access("IMT"."ORGANIZATION_ID"="IOP"."ORGANIZATION_ID")
+ 113 - filter(LEAST(:P_TRANSSOURCETYPENAME2_0,:P_TRANSSOURCETYPENAME2_1,:P_TRANSSOURCETYPENAME2_2,:P_TRANSSOURCETYPENAME2_3) IS NULL 
+              OR "TRANSACTION_TYPE_NAME"=:P_TRANSSOURCETYPENAME1_0 OR "TRANSACTION_TYPE_NAME"=:P_TRANSSOURCETYPENAME1_1 OR 
+              "TRANSACTION_TYPE_NAME"=:P_TRANSSOURCETYPENAME1_2 OR "TRANSACTION_TYPE_NAME"=:P_TRANSSOURCETYPENAME1_3)
+ 114 - access( "LANGUAGE"='US' AND "ORA_SEED_SET2"='Y')
+ 117 - filter("CCVC"."COST_ORG_ID"="CCIO"."COST_ORG_ID" AND INTERNAL_FUNCTION("CCVC"."END_DATE")-1>=SYSDATE@! AND 
+              "CCVC"."COST_METHOD_CODE"='PERPETUAL_AVERAGE')
+ 118 - access("VUB"."VAL_UNIT_ID"="CCVC"."VAL_UNIT_ID" AND "CCVC"."INVENTORY_ITEM_ID"="ESIB"."INVENTORY_ITEM_ID" AND 
+              "CCVC"."START_DATE"<=SYSDATE@!)
+ 119 - access("CCVC"."COST_BOOK_ID"="CBC"."COST_BOOK_ID")
+ 120 - filter("CICP"."ASSET_COST_PROFILE_ID" IS NOT NULL)
+ 121 - access("VUB"."COST_ORG_ID"="CICP"."COST_ORG_ID" AND "VUB"."COST_BOOK_ID"="CICP"."COST_BOOK_ID" AND 
+              "CICP"."INVENTORY_ITEM_ID"="CCVC"."INVENTORY_ITEM_ID")
+       filter("CICP"."COST_BOOK_ID"="CCVC"."COST_BOOK_ID")
+ 122 - filter("VUB"."VAL_STRUCTURE_ID"="CCP"."VAL_STRUCTURE_ID")
+ 123 - access("CCP"."COST_PROFILE_ID"="CICP"."ASSET_COST_PROFILE_ID")
+
+]]>
+</DATA_DS>
+</SQL_EXPLAIN_PLAN>
+
+]]> 
+</DATA_PROCESSOR_LOG> 
+</DIAGNOSTIC_OUT>
+
+VERSION 002
+
